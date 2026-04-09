@@ -305,23 +305,28 @@ function findNextButton() {
         'a[aria-label*="Next"]',
         'button[aria-label*="Next"]',
         'a[rel="next"]',
-        '[class*="next"]',
-        'button:contains("Next")'
+        '[class*="next"]'
     ];
 
     for (const selector of selectors) {
-        const button = document.querySelector(selector);
-        if (button && !button.disabled) {
-            return button;
+        try {
+            const button = document.querySelector(selector);
+            if (button && !button.disabled) {
+                return button;
+            }
+        } catch (e) {
+            // Skip invalid selectors
         }
     }
 
-    // Fallback: look for pagination buttons
+    // Fallback: look for pagination buttons by text content
     const allButtons = document.querySelectorAll('a, button');
     for (const btn of allButtons) {
-        const text = btn.textContent.toLowerCase();
-        if (text.includes('next') && !btn.disabled) {
-            return btn;
+        const text = btn.textContent.toLowerCase().trim();
+        if (text === 'next' || text.startsWith('next ')) {
+            if (!btn.disabled) {
+                return btn;
+            }
         }
     }
 
