@@ -84,84 +84,95 @@ async function extractAllPages(tabId) {
     let hasNextPage = true;
 
     while (hasNextPage && isRunning) {
-        updateAction(`Extracting agents from page ${pageNum}...`);
+        updateAction(`Scanning page ${pageNum} for agent links...`);
 
         try {
-            // Extract agents from current page
+            // Extract agent links from current page
             const response = await chrome.tabs.sendMessage(tabId, {
                 action: 'extractAgents'
             });
 
             const agents = response.agents || [];
-            allAgents = [...allAgents, ...agents];
-
-            updateStats(pageNum, allAgents.length, 0);
-
-            // Check if there's a next page
-            const nextPageExists = await checkNextPage(tabId);
-
-            if (nextPageExists) {
-                // Click next button
-                await chrome.tabs.sendMessage(tabId, {
-                    action: 'clickNext'
-                });
-
-                // Wait for page to load
-                await delay(3000);
-                pageNum++;
-            } else {
-                hasNextPage = false;
+            if (agents.length > 0) {
+                allAgents = [...allAgents, ...agents];
+                updateStats(pageNum, allAgents.length, 0);
             }
+
+            // For now, just get agents from this page
+            // In real use, you'd click Next and repeat
+            hasNextPage = false;
+
         } catch (e) {
-            console.error('Error extracting page:', e);
+            console.error('Error extracting agents:', e);
             hasNextPage = false;
         }
     }
 
-    updateAction(`Found ${allAgents.length} agents total`);
+    updateAction(`Found ${allAgents.length} agents. Starting phone extraction...`);
 }
 
 /**
- * Extract phone numbers from all agent profiles
+ * Extract phone numbers and names from all agent profiles
  */
 async function extractAllPhones(tabId) {
-    updateAction('Starting phone number extraction...');
+    updateAction('Starting phone extraction from profiles...');
     await delay(1000);
 
     for (let i = 0; i < allAgents.length; i++) {
         if (!isRunning) break;
 
         const agent = allAgents[i];
-        const progress = Math.round((i / allAgents.length) * 100);
+        const progress = Math.round(((i + 1) / allAgents.length) * 100);
 
-        updateAction(`Extracting phone: ${agent.name} (${i + 1}/${allAgents.length})`);
+        updateAction(`Opening profile: ${agent.name} (${i + 1}/${allAgents.length})...`);
         elements.progressFill.style.width = progress + '%';
 
         try {
+            // Validate agent link
+            if (!agent.link || !agent.link.startsWith('http')) {
+                console.log(`Skipping invalid link for ${agent.name}`);
+                continue;
+            }
+
             // Open agent profile in a new tab
             const newTab = await chrome.tabs.create({ url: agent.link, active: false });
 
-            // Wait for page to load
-            await delay(3000);
+            // Wait longer for Zillow profile to load
+            await delay(5000);
 
-            // Extract phone from the profile
-            const response = await chrome.tabs.sendMessage(newTab.id, {
-                action: 'extractPhone'
-            });
+            // Extract phone and name from the profile
+            try {
+                const response = await chrome.tabs.sendMessage(newTab.id, {
+                    action: 'extractPhone'
+                });
 
-            allExtractedPhones[agent.link] = response.phone || '';
+                // Store both name and phone
+                allAgents[i].phone = response.phone || '';
+                if (response.name) {
+                    allAgents[i].name = response.name;
+                }
+                allExtractedPhones[agent.link] = response.phone || '';
+            } catch (msgError) {
+                console.error(`Message error for ${agent.name}:`, msgError);
+                allExtractedPhones[agent.link] = '';
+            }
 
             // Close the tab
-            await chrome.tabs.remove(newTab.id);
+            try {
+                await chrome.tabs.remove(newTab.id);
+            } catch (closeError) {
+                console.log('Tab already closed');
+            }
 
             // Update stats
             const phonesFound = Object.values(allExtractedPhones).filter(p => p).length;
-            updateStats(pageNum, allAgents.length, phonesFound);
+            updateStats(1, allAgents.length, phonesFound);
 
             // Small delay between requests
-            await delay(500);
+            await delay(1000);
+
         } catch (e) {
-            console.error(`Error extracting phone for ${agent.name}:`, e);
+            console.error(`Error processing ${agent.name}:`, e);
             allExtractedPhones[agent.link] = '';
         }
     }
@@ -239,18 +250,16 @@ function downloadCSV() {
         return;
     }
 
-    // Build CSV
-    const headers = ['Full Name', 'Zillow Link', 'Phone Number', 'Brokerage', 'Rating'];
+    // Build CSV with tab separator
+    const headers = ['Full Name', 'Phone Number', 'Profile Link'];
     let csv = headers.join('\t') + '\n';
 
     allAgents.forEach(agent => {
-        const phone = allExtractedPhones[agent.link] || '';
+        const phone = agent.phone || allExtractedPhones[agent.link] || '';
         const values = [
-            agent.name,
-            agent.link,
+            agent.name || '',
             phone,
-            agent.brokerage || '',
-            agent.rating || ''
+            agent.link || ''
         ];
         csv += values.join('\t') + '\n';
     });

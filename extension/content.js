@@ -1,167 +1,81 @@
 /**
- * Content script for extracting agent data from Zillow search results
+ * Content script for extracting agent data from Zillow Find an Agent page
  */
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractAgents') {
-        const agents = extractAgentsFromPage();
+        const agents = extractAgentLinksFromPage();
         sendResponse({ agents });
-    } else if (request.action === 'clickNext') {
-        clickNext();
-        sendResponse({ success: true });
     } else if (request.action === 'extractPhone') {
-        const phone = extractPhoneFromProfile();
-        sendResponse({ phone });
+        const data = extractPhoneFromProfile();
+        sendResponse(data);
     }
 });
 
 /**
- * Extract agent data from current search results page
+ * Extract agent links from the Find an Agent page
  */
-function extractAgentsFromPage() {
+function extractAgentLinksFromPage() {
     const agents = [];
 
-    // Look for agent cards in the search results
-    // Zillow uses various selectors for agent info
-    const agentCards = document.querySelectorAll(
-        '[data-test="agentCardCell"], .agent-card, [class*="agentCard"]'
-    );
+    // Look for agent cards on the Find an Agent page
+    // Usually they're in divs with agent info
+    const agentCards = document.querySelectorAll('[class*="agent"], [class*="Agent"], .agent-card, [data-test*="agent"]');
 
-    // If no cards found, try alternative selectors
-    if (agentCards.length === 0) {
-        // Look for all listings and check if they have agent info
-        const listings = document.querySelectorAll(
-            '[data-test*="listing"], [class*="listing-card"], article'
-        );
+    // More specific: look for clickable agent elements
+    const allElements = document.querySelectorAll('a, div');
 
-        listings.forEach(listing => {
-            const agentData = extractAgentFromListing(listing);
-            if (agentData && agentData.name) {
-                agents.push(agentData);
+    allElements.forEach(el => {
+        // Check if this element links to an agent profile
+        const href = el.href || el.onclick?.toString() || '';
+
+        if (href.includes('/profile/') || el.textContent.match(/Profile|View|Agent/i)) {
+            const link = el.href || el.querySelector('a')?.href;
+            const name = el.textContent?.trim() || el.querySelector('h1, h2, h3, span')?.textContent?.trim();
+
+            if (link && name && link.includes('zillow.com')) {
+                agents.push({
+                    name: name.split('\n')[0], // Get first line only
+                    link: link
+                });
             }
-        });
-    } else {
-        agentCards.forEach(card => {
-            const agentData = extractAgentFromCard(card);
-            if (agentData && agentData.name) {
-                agents.push(agentData);
-            }
-        });
-    }
+        }
+    });
 
-    // Deduplicate by name + link
+    // Deduplicate by link
     const seen = new Set();
     return agents.filter(agent => {
-        const key = `${agent.name}|${agent.link}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
+        if (seen.has(agent.link)) return false;
+        seen.add(agent.link);
+        return agent.link && agent.name && agent.name.length > 2;
+    }).slice(0, 100); // Limit to 100 to avoid too many
 }
 
 /**
- * Extract agent info from a card element
- */
-function extractAgentFromCard(card) {
-    try {
-        const nameEl = card.querySelector(
-            '[class*="agentName"], [data-test*="agent"], a[href*="/profile/"]'
-        );
-        const linkEl = card.querySelector('a[href*="/profile/"]');
-        const brokerageEl = card.querySelector('[class*="brokerage"]');
-        const ratingEl = card.querySelector('[class*="rating"]');
-
-        if (!nameEl || !linkEl) return null;
-
-        return {
-            name: (nameEl.textContent || '').trim(),
-            link: linkEl.href || '',
-            brokerage: (brokerageEl?.textContent || '').trim(),
-            rating: (ratingEl?.textContent || '').trim(),
-            phone: ''
-        };
-    } catch (e) {
-        return null;
-    }
-}
-
-/**
- * Extract agent info from a listing element
- */
-function extractAgentFromListing(listing) {
-    try {
-        // Look for agent-related elements
-        const agentLink = listing.querySelector('a[href*="/profile/"]');
-        if (!agentLink) return null;
-
-        const agentName = agentLink.textContent.trim();
-        const agentUrl = agentLink.href;
-
-        // Try to find additional agent info nearby
-        const brokerageEl = listing.querySelector('[class*="brokerage"]') ||
-                           listing.querySelector('span:contains("Brokerage")');
-
-        return {
-            name: agentName,
-            link: agentUrl,
-            brokerage: (brokerageEl?.textContent || '').trim(),
-            rating: '',
-            phone: ''
-        };
-    } catch (e) {
-        return null;
-    }
-}
-
-/**
- * Click the "Next" button to go to the next page of results
- */
-function clickNext() {
-    // Try various selectors for the Next button
-    const nextSelectors = [
-        'a[aria-label*="Next"]',
-        'button[aria-label*="Next"]',
-        'a[rel="next"]',
-        '[class*="next-page"]',
-        'a:contains("Next")',
-        'button:contains("Next")'
-    ];
-
-    for (const selector of nextSelectors) {
-        const button = document.querySelector(selector);
-        if (button && !button.disabled) {
-            button.click();
-            return;
-        }
-    }
-
-    // Fallback: look for pagination links
-    const paginationLinks = document.querySelectorAll('a, button');
-    for (const link of paginationLinks) {
-        if ((link.textContent.includes('Next') || link.getAttribute('aria-label')?.includes('Next')) && !link.disabled) {
-            link.click();
-            return;
-        }
-    }
-}
-
-/**
- * Extract phone number from an agent's profile page
+ * Extract phone number and full name from agent's profile page
  */
 function extractPhoneFromProfile() {
+    // Get agent name from page
+    const nameEl = document.querySelector('h1, [class*="name"], [data-test*="name"]') ||
+                   document.querySelector('span[class*="Name"]');
+    const fullName = nameEl?.textContent?.trim() || '';
+
     // Multiple strategies to find phone number
 
-    // Strategy 1: Look for tel: links
+    // Strategy 1: Look for tel: links (most reliable)
     const telLink = document.querySelector('a[href^="tel:"]');
     if (telLink) {
         const phone = telLink.href.replace('tel:', '').trim();
-        if (phone) return cleanPhone(phone);
+        if (phone) {
+            const cleaned = cleanPhone(phone);
+            if (cleaned) return { name: fullName, phone: cleaned };
+        }
     }
 
     // Strategy 2: Look for data attributes
     const phoneElements = document.querySelectorAll(
-        '[data-phone], [data-number], [phone], [class*="phone-number"]'
+        '[data-phone], [data-number], [phone], [class*="phone-number"], [class*="Phone"]'
     );
 
     for (const el of phoneElements) {
@@ -170,11 +84,27 @@ function extractPhoneFromProfile() {
                      el.getAttribute('phone') ||
                      el.textContent;
         if (phone && isValidPhone(phone)) {
-            return cleanPhone(phone);
+            const cleaned = cleanPhone(phone);
+            if (cleaned) return { name: fullName, phone: cleaned };
         }
     }
 
-    // Strategy 3: Regex search in page text
+    // Strategy 3: Look for "Call" or "Phone" buttons with contact info
+    const contactButtons = document.querySelectorAll('button, a, span');
+    for (const btn of contactButtons) {
+        const text = btn.textContent;
+        if (text && (text.includes('Call') || text.includes('Phone'))) {
+            const parent = btn.closest('div, section');
+            if (parent) {
+                const phoneMatch = parent.innerText.match(/\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/);
+                if (phoneMatch) {
+                    return { name: fullName, phone: cleanPhone(phoneMatch[0]) };
+                }
+            }
+        }
+    }
+
+    // Strategy 4: Regex search in visible text
     const pageText = document.body.innerText;
     const phonePatterns = [
         /\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/,
@@ -185,20 +115,20 @@ function extractPhoneFromProfile() {
     for (const pattern of phonePatterns) {
         const match = pageText.match(pattern);
         if (match) {
-            return cleanPhone(match[0]);
+            return { name: fullName, phone: cleanPhone(match[0]) };
         }
     }
 
-    // Strategy 4: Look in HTML for phone patterns
+    // Strategy 5: Look in HTML source
     const htmlText = document.documentElement.innerHTML;
     for (const pattern of phonePatterns) {
         const match = htmlText.match(pattern);
         if (match) {
-            return cleanPhone(match[0]);
+            return { name: fullName, phone: cleanPhone(match[0]) };
         }
     }
 
-    return '';
+    return { name: fullName, phone: '' };
 }
 
 /**
