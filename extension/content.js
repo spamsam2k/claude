@@ -10,8 +10,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const data = extractProfile();
         sendResponse(data);
     } else if (request.action === 'clickNextPage') {
-        clickNextPage(request.selector);
-        sendResponse({ success: true });
+        const success = clickNextPageAuto();
+        sendResponse({ success });
     }
 });
 
@@ -113,19 +113,32 @@ function formatPhone(phone) {
     return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6,10)}`;
 }
 
-function clickNextPage(selector) {
-    if (!selector) {
-        // Try to auto-find next button
-        const buttons = document.querySelectorAll('a, button');
-        for (const btn of buttons) {
-            if (btn.innerText.toLowerCase().includes('next') && !btn.disabled) {
-                btn.click();
-                return;
-            }
-        }
-    } else {
-        // Use provided selector
-        const element = document.querySelector(selector);
-        if (element) element.click();
+function clickNextPageAuto() {
+    // Strategy 1: Look for next button with aria-label
+    let nextBtn = document.querySelector('[aria-label*="next"], [aria-label*="Next"]');
+    if (nextBtn && !nextBtn.disabled) {
+        nextBtn.click();
+        return true;
     }
+
+    // Strategy 2: Look for button/link with "next" text
+    const allElements = document.querySelectorAll('button, a, [role="button"]');
+    for (const el of allElements) {
+        const text = el.innerText?.toLowerCase() || el.textContent?.toLowerCase() || '';
+        if (text.includes('next') && !el.disabled) {
+            el.click();
+            return true;
+        }
+    }
+
+    // Strategy 3: Look for pagination arrow buttons (right arrow)
+    const rightArrows = document.querySelectorAll('button[aria-label*="right"], a[aria-label*="next"]');
+    for (const arrow of rightArrows) {
+        if (!arrow.disabled) {
+            arrow.click();
+            return true;
+        }
+    }
+
+    return false;
 }

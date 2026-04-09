@@ -7,6 +7,7 @@ let maxLeads = 100;
 
 const elements = {
     extractBtn: document.getElementById('extractBtn'),
+    nextBtn: document.getElementById('nextBtn'),
     downloadBtn: document.getElementById('downloadBtn'),
     resetBtn: document.getElementById('resetBtn'),
     progress: document.getElementById('progress'),
@@ -19,6 +20,7 @@ const elements = {
 };
 
 elements.extractBtn.addEventListener('click', extractPage);
+elements.nextBtn.addEventListener('click', clickNextPage);
 elements.downloadBtn.addEventListener('click', downloadCSV);
 elements.resetBtn.addEventListener('click', resetData);
 
@@ -57,12 +59,13 @@ async function extractPage() {
         elements.statusBadge.textContent = 'Complete';
         elements.downloadBtn.style.display = 'inline-block';
         elements.resetBtn.style.display = 'inline-block';
+        elements.nextBtn.style.display = 'inline-block';
 
         if (allAgents.length >= parseInt(elements.maxLeads.value)) {
-            elements.extractBtn.disabled = true;
+            elements.nextBtn.disabled = true;
             elements.footerText.textContent = '✓ Reached maximum leads!';
         } else {
-            elements.footerText.textContent = '👉 Navigate to next page in Zillow, then click "Extract This Page" again';
+            elements.footerText.textContent = '👉 Click "Next Page" to go to next page and extract';
         }
 
     } catch (e) {
@@ -101,6 +104,34 @@ async function extractPhones(tabId, agents) {
         } catch (e) {
             console.error('Phone extraction error:', e);
         }
+    }
+}
+
+/**
+ * Click next page button
+ */
+async function clickNextPage() {
+    const tab = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    elements.nextBtn.disabled = true;
+    elements.currentAction.textContent = 'Clicking next page...';
+
+    try {
+        await chrome.tabs.sendMessage(tab[0].id, {
+            action: 'clickNextPage'
+        });
+
+        // Wait for page to load
+        elements.currentAction.textContent = 'Page loading... Ready to extract when you see the next page';
+        elements.footerText.textContent = '⏳ Wait for page to load, then click "Extract This Page"';
+
+        setTimeout(() => {
+            elements.nextBtn.disabled = false;
+        }, 2000);
+
+    } catch (e) {
+        elements.currentAction.textContent = `❌ Could not find next button: ${e.message}`;
+        elements.nextBtn.disabled = false;
     }
 }
 
