@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>🏠 Zillow Scraper</h1>
-            <p class="subtitle">Extract agents & phone numbers</p>
+            <p class="subtitle">Extract agent data</p>
         </header>
 
         <div id="status" class="status">
@@ -18,97 +18,48 @@
         </div>
 
         <div id="controls" class="controls">
-            <div class="settings-section">
-                <h3>⚙️ Scraper Settings</h3>
-
-                <div class="setting-group">
-                    <label for="minDeals">Minimum Sales Last 12 Months:</label>
-                    <input type="number" id="minDeals" value="0" min="0" placeholder="0 for all (team or individual)">
-                </div>
-
-                <div class="setting-group">
-                    <label for="maxLeads">Maximum Leads to Scrape:</label>
-                    <input type="number" id="maxLeads" value="100" min="1" placeholder="100">
-                </div>
-
-                <div class="setting-group">
-                    <h4>📋 Fields to Scrape:</h4>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapePhone" checked>
-                        Phone Number
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapeEmail">
-                        Email Address
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapeBrokerage" checked>
-                        Brokerage Name
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapeBio">
-                        Bio / Description
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapeExperience">
-                        Years of Experience
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scrapeTotalSales">
-                        Total Sales
-                    </label>
-                </div>
+            <div class="button-group">
+                <button id="extractBtn" class="btn btn-primary btn-large">
+                    <span class="btn-icon">📋</span>
+                    <span>Extract This Page</span>
+                </button>
+                <button id="nextBtn" class="btn btn-secondary">
+                    <span class="btn-icon">▶️</span>
+                    <span>Next Page</span>
+                </button>
             </div>
 
-            <button id="startBtn" class="btn btn-primary btn-large">
-                <span class="btn-icon">▶️</span>
-                <span>Start Extraction</span>
-            </button>
-            <button id="stopBtn" class="btn btn-secondary" disabled>
-                <span class="btn-icon">⏹️</span>
-                <span>Stop</span>
+            <div class="setting-group" style="margin-top: 15px;">
+                <label for="maxLeads">Stop After X Agents:</label>
+                <input type="number" id="maxLeads" value="100" min="1">
+            </div>
+
+            <button id="downloadBtn" class="btn btn-primary" style="margin-top: 10px; display: none;">
+                <span class="btn-icon">⬇️</span>
+                <span>Download CSV</span>
             </button>
         </div>
 
         <div id="progress" class="progress-section" style="display: none;">
             <div class="progress-item">
-                <label>Pages Scanned:</label>
-                <span id="pagesCount">0</span>
-            </div>
-            <div class="progress-item">
-                <label>Agents Found:</label>
+                <label>Agents Extracted:</label>
                 <span id="agentsCount">0</span>
             </div>
             <div class="progress-item">
-                <label>Phones Extracted:</label>
+                <label>Phones Found:</label>
                 <span id="phonesCount">0</span>
             </div>
-            <div class="progress-bar">
-                <div id="progressFill" class="progress-fill"></div>
-            </div>
-            <p id="currentAction" class="current-action">Initializing...</p>
+            <p id="currentAction" class="current-action">Extracting...</p>
         </div>
 
-        <div id="results" class="results" style="display: none;">
-            <h3>✅ Extraction Complete</h3>
-            <p id="resultsSummary"></p>
-            <button id="downloadBtn" class="btn btn-primary">
-                <span class="btn-icon">⬇️</span>
-                <span>Download CSV</span>
-            </button>
-            <button id="resetBtn" class="btn btn-secondary">
-                <span class="btn-icon">🔄</span>
-                <span>Start Over</span>
-            </button>
-        </div>
-
-        <div id="error" class="error" style="display: none;">
-            <p id="errorMessage"></p>
-            <button id="errorCloseBtn" class="btn btn-secondary">Close</button>
+        <div id="selectorMode" class="selector-mode" style="display: none;">
+            <h3>📍 Select Next Page Button</h3>
+            <p>Click the element you want to use as the "Next" button on this page</p>
+            <button id="selectorCancel" class="btn btn-secondary">Cancel</button>
         </div>
 
         <footer>
-            <p>Make sure you're on a Zillow search results page</p>
+            <p id="footerText">On Zillow Find an Agent page - Click "Extract This Page" to start</p>
         </footer>
     </div>
 

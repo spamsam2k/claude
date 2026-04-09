@@ -1,300 +1,178 @@
 /**
- * Popup script - handles UI and orchestrates the scraping process
+ * Simple popup - just extract page and let user click next manually
  */
 
-let isRunning = false;
 let allAgents = [];
-let allExtractedData = {};
-let scrapedCount = 0;
+let nextPageSelector = null;
+let maxLeads = 100;
 
 const elements = {
-    startBtn: document.getElementById('startBtn'),
-    stopBtn: document.getElementById('stopBtn'),
-    controls: document.querySelector('.controls'),
+    extractBtn: document.getElementById('extractBtn'),
+    nextBtn: document.getElementById('nextBtn'),
+    downloadBtn: document.getElementById('downloadBtn'),
     progress: document.getElementById('progress'),
-    results: document.getElementById('results'),
-    error: document.getElementById('error'),
-    statusBadge: document.getElementById('statusBadge'),
-    pagesCount: document.getElementById('pagesCount'),
     agentsCount: document.getElementById('agentsCount'),
     phonesCount: document.getElementById('phonesCount'),
-    progressFill: document.getElementById('progressFill'),
     currentAction: document.getElementById('currentAction'),
-    resultsSummary: document.getElementById('resultsSummary'),
-    downloadBtn: document.getElementById('downloadBtn'),
-    resetBtn: document.getElementById('resetBtn'),
-    errorMessage: document.getElementById('errorMessage'),
-    errorCloseBtn: document.getElementById('errorCloseBtn'),
-    minDeals: document.getElementById('minDeals'),
+    selectorMode: document.getElementById('selectorMode'),
+    selectorCancel: document.getElementById('selectorCancel'),
+    statusBadge: document.getElementById('statusBadge'),
     maxLeads: document.getElementById('maxLeads'),
-    scrapePhone: document.getElementById('scrapePhone'),
-    scrapeEmail: document.getElementById('scrapeEmail'),
-    scrapeBrokerage: document.getElementById('scrapeBrokerage'),
-    scrapeBio: document.getElementById('scrapeBio'),
-    scrapeExperience: document.getElementById('scrapeExperience'),
-    scrapeTotalSales: document.getElementById('scrapeTotalSales')
+    footerText: document.getElementById('footerText')
 };
 
-// Event listeners
-elements.startBtn.addEventListener('click', startExtraction);
-elements.stopBtn.addEventListener('click', stopExtraction);
+elements.extractBtn.addEventListener('click', extractPage);
+elements.nextBtn.addEventListener('click', setupNextPageSelector);
 elements.downloadBtn.addEventListener('click', downloadCSV);
-elements.resetBtn.addEventListener('click', resetUI);
-elements.errorCloseBtn.addEventListener('click', () => hideError());
+elements.selectorCancel.addEventListener('click', cancelSelector);
 
 /**
- * Start the extraction process
+ * Extract agents from current page
  */
-async function startExtraction() {
-    try {
-        const tab = await chrome.tabs.query({ active: true, currentWindow: true });
-        const currentUrl = tab[0].url;
+async function extractPage() {
+    const tab = await chrome.tabs.query({ active: true, currentWindow: true });
+    const currentUrl = tab[0].url;
 
-        if (!currentUrl.includes('zillow.com')) {
-            showError('Please navigate to Zillow Find an Agent page first');
-            return;
-        }
-
-        isRunning = true;
-        allAgents = [];
-        allExtractedData = {};
-        scrapedCount = 0;
-
-        // Get settings
-        const settings = getSettings();
-
-        // Update UI
-        elements.startBtn.disabled = true;
-        elements.stopBtn.disabled = false;
-        elements.controls.style.display = 'none';
-        elements.progress.style.display = 'block';
-        elements.results.style.display = 'none';
-        elements.error.style.display = 'none';
-        elements.statusBadge.classList.add('running');
-        elements.statusBadge.textContent = 'Running';
-
-        // Extract agents with pagination
-        await extractAllPages(tab[0].id, settings);
-
-        if (isRunning && allAgents.length > 0) {
-            // Extract profile data
-            await extractAllProfiles(tab[0].id, settings);
-            showResults(settings);
-        }
-    } catch (e) {
-        showError(`Error: ${e.message}`);
-    }
-}
-
-/**
- * Get settings from UI
- */
-function getSettings() {
-    return {
-        minDeals: parseInt(elements.minDeals.value) || 0,
-        maxLeads: parseInt(elements.maxLeads.value) || 100,
-        phone: elements.scrapePhone.checked,
-        email: elements.scrapeEmail.checked,
-        brokerage: elements.scrapeBrokerage.checked,
-        bio: elements.scrapeBio.checked,
-        experience: elements.scrapeExperience.checked,
-        totalSales: elements.scrapeTotalSales.checked
-    };
-}
-
-/**
- * Extract agents from all pages
- */
-async function extractAllPages(tabId, settings) {
-    let pageNum = 1;
-    let hasNextPage = true;
-
-    while (hasNextPage && isRunning && scrapedCount < settings.maxLeads) {
-        const minLabel = settings.minDeals > 0 ? `(min ${settings.minDeals} sales)` : '';
-        updateAction(`Scanning page ${pageNum} for agents ${minLabel}...`);
-
-        try {
-            const response = await chrome.tabs.sendMessage(tabId, {
-                action: 'extractAgents',
-                minDeals: settings.minDeals
-            });
-
-            const agents = response.agents || [];
-            if (agents.length > 0) {
-                // Only add up to maxLeads
-                const remaining = settings.maxLeads - scrapedCount;
-                const toAdd = agents.slice(0, remaining);
-                allAgents = [...allAgents, ...toAdd];
-                scrapedCount += toAdd.length;
-
-                updateStats(pageNum, allAgents.length);
-
-                if (scrapedCount >= settings.maxLeads) {
-                    hasNextPage = false;
-                    updateAction(`Reached limit of ${settings.maxLeads} leads`);
-                    break;
-                }
-            }
-
-            // Check for next page
-            const nextCheck = await chrome.tabs.sendMessage(tabId, {
-                action: 'hasNextPage'
-            });
-
-            if (nextCheck.hasNext) {
-                await chrome.tabs.sendMessage(tabId, {
-                    action: 'clickNext'
-                });
-                await delay(3000); // Wait for page to load
-                pageNum++;
-            } else {
-                hasNextPage = false;
-            }
-        } catch (e) {
-            console.error('Error extracting page:', e);
-            hasNextPage = false;
-        }
-    }
-
-    updateAction(`Found ${allAgents.length} agents. Extracting profile data...`);
-}
-
-/**
- * Extract profile data from all agents
- */
-async function extractAllProfiles(tabId, settings) {
-    updateAction('Starting profile extraction...');
-    await delay(1000);
-
-    for (let i = 0; i < allAgents.length; i++) {
-        if (!isRunning) break;
-
-        const agent = allAgents[i];
-        const progress = Math.round(((i + 1) / allAgents.length) * 100);
-
-        updateAction(`Extracting profile: ${agent.name} (${i + 1}/${allAgents.length})...`);
-        elements.progressFill.style.width = progress + '%';
-
-        try {
-            if (!agent.link || !agent.link.startsWith('http')) {
-                continue;
-            }
-
-            const newTab = await chrome.tabs.create({ url: agent.link, active: false });
-            await delay(4000);
-
-            try {
-                const response = await chrome.tabs.sendMessage(newTab.id, {
-                    action: 'extractProfile',
-                    fields: settings
-                });
-
-                allExtractedData[agent.link] = response;
-            } catch (msgError) {
-                console.error(`Message error for ${agent.name}:`, msgError);
-                allExtractedData[agent.link] = {};
-            }
-
-            try {
-                await chrome.tabs.remove(newTab.id);
-            } catch (closeError) {
-                console.log('Tab already closed');
-            }
-
-            updateStats(1, allAgents.length);
-            await delay(1000);
-
-        } catch (e) {
-            console.error(`Error processing ${agent.name}:`, e);
-        }
-    }
-
-    updateAction('Extraction complete!');
-    elements.progressFill.style.width = '100%';
-}
-
-/**
- * Stop the extraction process
- */
-function stopExtraction() {
-    isRunning = false;
-    elements.startBtn.disabled = false;
-    elements.stopBtn.disabled = true;
-    elements.statusBadge.classList.remove('running');
-    elements.statusBadge.textContent = 'Stopped';
-    updateAction('Extraction stopped');
-}
-
-/**
- * Update statistics display
- */
-function updateStats(pages, agents) {
-    elements.pagesCount.textContent = pages;
-    elements.agentsCount.textContent = agents;
-    elements.phonesCount.textContent = Object.values(allExtractedData).filter(d => d.phone).length;
-}
-
-/**
- * Update current action text
- */
-function updateAction(text) {
-    elements.currentAction.textContent = text;
-}
-
-/**
- * Show results section
- */
-function showResults(settings) {
-    elements.progress.style.display = 'none';
-    elements.results.style.display = 'block';
-    elements.statusBadge.classList.remove('running');
-    elements.statusBadge.textContent = 'Complete';
-
-    const phonesFound = Object.values(allExtractedData).filter(d => d.phone).length;
-    const emailsFound = Object.values(allExtractedData).filter(d => d.email).length;
-
-    let summary = `<strong>${allAgents.length}</strong> agents extracted<br>`;
-    if (settings.phone) summary += `<strong>${phonesFound}</strong> phone numbers found<br>`;
-    if (settings.email) summary += `<strong>${emailsFound}</strong> emails found<br>`;
-    summary += `Success rate: <strong>${Math.round((phonesFound / allAgents.length) * 100)}%</strong>`;
-
-    elements.resultsSummary.innerHTML = summary;
-}
-
-/**
- * Download results as CSV
- */
-function downloadCSV() {
-    if (allAgents.length === 0) {
-        alert('No data to download');
+    if (!currentUrl.includes('zillow.com')) {
+        elements.footerText.textContent = '❌ Not on Zillow!';
         return;
     }
 
-    const settings = getSettings();
-    const headers = ['Full Name', 'Profile Link'];
+    elements.extractBtn.disabled = true;
+    elements.progress.style.display = 'block';
+    elements.currentAction.textContent = 'Extracting agents...';
 
-    if (settings.phone) headers.push('Phone Number');
-    if (settings.email) headers.push('Email');
-    if (settings.brokerage) headers.push('Brokerage');
-    headers.push('Team Sales (12mo)');
-    if (settings.bio) headers.push('Bio');
-    if (settings.experience) headers.push('Years Experience');
-    if (settings.totalSales) headers.push('Total Sales');
+    try {
+        const response = await chrome.tabs.sendMessage(tab[0].id, {
+            action: 'extractAgents'
+        });
 
+        const newAgents = response.agents || [];
+        allAgents = allAgents.concat(newAgents);
+
+        // Extract phones from profiles (in background)
+        await extractPhones(tab[0].id, newAgents);
+
+        elements.agentsCount.textContent = allAgents.length;
+        elements.phonesCount.textContent = allAgents.filter(a => a.phone).length;
+        elements.currentAction.textContent = `✓ Found ${newAgents.length} agents on this page (${allAgents.length} total)`;
+        elements.statusBadge.textContent = 'Complete';
+        elements.downloadBtn.style.display = 'inline-block';
+
+        if (allAgents.length >= parseInt(elements.maxLeads.value)) {
+            elements.nextBtn.disabled = true;
+            elements.footerText.textContent = '✓ Reached maximum leads!';
+        }
+
+    } catch (e) {
+        elements.currentAction.textContent = `❌ Error: ${e.message}`;
+    } finally {
+        elements.extractBtn.disabled = false;
+    }
+}
+
+/**
+ * Extract phones from each agent's profile
+ */
+async function extractPhones(tabId, agents) {
+    for (const agent of agents) {
+        if (allAgents.length >= parseInt(elements.maxLeads.value)) break;
+
+        try {
+            const newTab = await chrome.tabs.create({ url: agent.link, active: false });
+            await delay(3000);
+
+            const response = await chrome.tabs.sendMessage(newTab.id, {
+                action: 'extractProfile',
+                fields: { phone: true, email: true, brokerage: true }
+            });
+
+            const idx = allAgents.findIndex(a => a.link === agent.link);
+            if (idx >= 0) {
+                allAgents[idx].phone = response.phone || '';
+                allAgents[idx].email = response.email || '';
+                allAgents[idx].brokerage = response.brokerage || allAgents[idx].brokerage || '';
+            }
+
+            await chrome.tabs.remove(newTab.id);
+            elements.phonesCount.textContent = allAgents.filter(a => a.phone).length;
+
+            await delay(500);
+        } catch (e) {
+            console.error('Phone extraction error:', e);
+        }
+    }
+}
+
+/**
+ * Setup next page button selector
+ */
+async function setupNextPageSelector() {
+    if (nextPageSelector) {
+        // Already have a selector, just click it
+        const tab = await chrome.tabs.query({ active: true, currentWindow: true });
+        await chrome.tabs.sendMessage(tab[0].id, {
+            action: 'clickNextPage',
+            selector: nextPageSelector
+        });
+        return;
+    }
+
+    // Enter selector mode
+    elements.selectorMode.style.display = 'block';
+    elements.nextBtn.disabled = true;
+    elements.extractBtn.disabled = true;
+
+    const tab = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    // Inject click listener on the page
+    await chrome.tabs.executeScript(tab[0].id, {
+        code: `
+            window.selectedElement = null;
+            document.addEventListener('click', (e) => {
+                if (e.target.id !== 'zillow-selector-cancel') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.selectedElement = e.target;
+                }
+            }, true);
+        `
+    }).catch(() => {});
+
+    // Wait for selection
+    await delay(100);
+    elements.footerText.textContent = '👆 Click the Next Page button on the page...';
+}
+
+/**
+ * Cancel selector mode
+ */
+function cancelSelector() {
+    elements.selectorMode.style.display = 'none';
+    elements.nextBtn.disabled = false;
+    elements.extractBtn.disabled = false;
+}
+
+/**
+ * Download CSV
+ */
+function downloadCSV() {
+    if (allAgents.length === 0) {
+        alert('No agents to download');
+        return;
+    }
+
+    const headers = ['Name', 'Phone', 'Email', 'Brokerage', 'Profile Link'];
     let csv = headers.join('\t') + '\n';
 
     allAgents.forEach(agent => {
-        const data = allExtractedData[agent.link] || {};
-        const values = [agent.name, agent.link];
-
-        if (settings.phone) values.push(data.phone || agent.phone || '');
-        if (settings.email) values.push(data.email || '');
-        if (settings.brokerage) values.push(data.brokerage || agent.brokerage || '');
-        values.push(agent.teamSales || '');
-        if (settings.bio) values.push((data.bio || '').replace(/\n/g, ' '));
-        if (settings.experience) values.push(data.experience || '');
-        if (settings.totalSales) values.push(data.totalSales || '');
-
+        const values = [
+            agent.name || '',
+            agent.phone || '',
+            agent.email || '',
+            agent.brokerage || '',
+            agent.link || ''
+        ];
         csv += values.join('\t') + '\n';
     });
 
@@ -307,65 +185,15 @@ function downloadCSV() {
     window.URL.revokeObjectURL(url);
 }
 
-/**
- * Reset UI
- */
-function resetUI() {
-    isRunning = false;
-    allAgents = [];
-    allExtractedData = {};
-    scrapedCount = 0;
-
-    elements.startBtn.disabled = false;
-    elements.stopBtn.disabled = true;
-    elements.controls.style.display = 'flex';
-    elements.progress.style.display = 'none';
-    elements.results.style.display = 'none';
-    elements.error.style.display = 'none';
-    elements.statusBadge.classList.remove('running');
-    elements.statusBadge.textContent = 'Ready';
-    elements.progressFill.style.width = '0%';
-
-    updateStats(0, 0);
-}
-
-/**
- * Show error message
- */
-function showError(message) {
-    elements.error.style.display = 'block';
-    elements.errorMessage.textContent = message;
-    elements.statusBadge.classList.add('error');
-    elements.statusBadge.textContent = 'Error';
-    elements.startBtn.disabled = false;
-    elements.stopBtn.disabled = true;
-}
-
-/**
- * Hide error message
- */
-function hideError() {
-    elements.error.style.display = 'none';
-    elements.statusBadge.classList.remove('error');
-    elements.statusBadge.textContent = 'Ready';
-}
-
-/**
- * Utility: delay function
- */
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Check if on Zillow on popup open
- */
+// Check if on Zillow
 window.addEventListener('DOMContentLoaded', async () => {
     const tab = await chrome.tabs.query({ active: true, currentWindow: true });
-    const currentUrl = tab[0].url;
-
-    if (!currentUrl.includes('zillow.com')) {
-        elements.statusBadge.textContent = 'Not on Zillow';
-        elements.startBtn.disabled = true;
+    if (!tab[0].url.includes('zillow.com')) {
+        elements.extractBtn.disabled = true;
+        elements.footerText.textContent = '❌ Go to Zillow Find an Agent page';
     }
 });
