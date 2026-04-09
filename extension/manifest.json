@@ -22,8 +22,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.zillow.com/homes/for_sale/*"],
-      "js": ["content.js"]
+      "matches": ["https://www.zillow.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
     }
   ]
 }
