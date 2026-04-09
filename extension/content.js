@@ -29,16 +29,24 @@ function extractAgentLinksFromPage(minDeals = 0) {
     const agents = [];
     const seen = new Set();
 
+    console.log('Starting agent extraction...');
+
     // Look for agent profile links
     const profileLinks = document.querySelectorAll('a[href*="/profile/"]');
+    console.log(`Found ${profileLinks.length} profile links`);
 
-    profileLinks.forEach(link => {
+    profileLinks.forEach((link, idx) => {
         const href = link.href;
         const text = link.textContent.trim();
 
+        console.log(`Link ${idx}: ${text.substring(0, 30)} -> ${href}`);
+
         if (href && text && !seen.has(href)) {
-            // Find the agent card container
-            const cardContainer = link.closest('[class*="agent"], div[class*="card"], article, section');
+            // Find the agent card container - look up the DOM tree
+            let cardContainer = link.closest('div');
+            while (cardContainer && cardContainer.innerText.length < 500) {
+                cardContainer = cardContainer.parentElement;
+            }
 
             if (cardContainer) {
                 const agentData = extractAgentCardData(cardContainer, link, minDeals);
@@ -46,11 +54,13 @@ function extractAgentLinksFromPage(minDeals = 0) {
                 if (agentData) {
                     agents.push(agentData);
                     seen.add(href);
+                    console.log(`✓ Added agent: ${agentData.name}`);
                 }
             }
         }
     });
 
+    console.log(`Total agents extracted: ${agents.length}`);
     return agents;
 }
 
