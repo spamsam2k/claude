@@ -10,22 +10,46 @@ async def extract_phone_number(page, url):
     try:
         await page.goto(url, wait_until='networkidle', timeout=30000)
 
-        # Wait a bit for any dynamic content to load
+        # Wait for dynamic content and scroll to trigger lazy loading
+        await page.wait_for_timeout(3000)
+
+        # Scroll down to load more content
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(2000)
 
-        # Get all text from the page
+        # Look for contact button or phone reveal elements
+        try:
+            # Try to find and click "Contact Agent" or similar buttons
+            contact_buttons = await page.query_selector_all('[class*="contact"], [class*="phone"], [class*="call"]')
+            for button in contact_buttons:
+                try:
+                    await button.click()
+                    await page.wait_for_timeout(1000)
+                except:
+                    pass
+        except:
+            pass
+
+        # Get all text from the page (including data attributes)
         page_text = await page.content()
 
-        # Look for phone number patterns (xxx) xxx-xxxx or xxx-xxx-xxxx
+        # Look for phone number patterns - expanded patterns
         phone_patterns = [
-            r'\(\d{3}\)\s*\d{3}[-.]?\d{4}',  # (123) 456-7890
-            r'\d{3}[-.]?\d{3}[-.]?\d{4}',     # 123-456-7890 or 123.456.7890
+            r'\b\(?\d{3}\)?\s*[-.]?\s*\d{3}\s*[-.]?\s*\d{4}\b',  # Various formats
+            r'\+1?\s*\(?\d{3}\)?\s*[-.]?\s*\d{3}\s*[-.]?\s*\d{4}',  # With country code
+            r'tel:[\s]*(\+?[\d\s\-\(\)]{10,})',  # tel: protocol
         ]
 
         for pattern in phone_patterns:
             matches = re.findall(pattern, page_text)
             if matches:
-                return matches[0]
+                # Clean up the match
+                phone = matches[0].strip()
+                if phone.startswith('tel:'):
+                    phone = phone[4:].strip()
+                # Only return if it looks like a valid phone
+                if re.search(r'\d{3}.*\d{3}.*\d{4}', phone):
+                    return phone
 
         return None
     except Exception as e:
