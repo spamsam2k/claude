@@ -18,38 +18,69 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 function extractAgentLinksFromPage() {
     const agents = [];
+    const seen = new Set();
 
-    // Look for agent cards on the Find an Agent page
-    // Usually they're in divs with agent info
-    const agentCards = document.querySelectorAll('[class*="agent"], [class*="Agent"], .agent-card, [data-test*="agent"]');
+    // Strategy 1: Look for agent profile links directly
+    const profileLinks = document.querySelectorAll('a[href*="/profile/"]');
 
-    // More specific: look for clickable agent elements
-    const allElements = document.querySelectorAll('a, div');
+    profileLinks.forEach(link => {
+        const href = link.href;
+        const text = link.textContent.trim();
 
-    allElements.forEach(el => {
-        // Check if this element links to an agent profile
-        const href = el.href || el.onclick?.toString() || '';
+        if (href && text && !seen.has(href)) {
+            // Get the agent name - could be in the link or nearby
+            let agentName = text;
 
-        if (href.includes('/profile/') || el.textContent.match(/Profile|View|Agent/i)) {
-            const link = el.href || el.querySelector('a')?.href;
-            const name = el.textContent?.trim() || el.querySelector('h1, h2, h3, span')?.textContent?.trim();
+            // If text is very short, look for name in parent elements
+            if (agentName.length < 3) {
+                const parent = link.closest('[class*="agent"], div, section');
+                if (parent) {
+                    const nameEl = parent.querySelector('h1, h2, h3, span[class*="name"]');
+                    if (nameEl) {
+                        agentName = nameEl.textContent.trim();
+                    }
+                }
+            }
 
-            if (link && name && link.includes('zillow.com')) {
+            // Clean up the name
+            agentName = agentName.split('\n')[0].trim();
+
+            if (agentName.length > 2 && href.includes('zillow.com')) {
                 agents.push({
-                    name: name.split('\n')[0], // Get first line only
-                    link: link
+                    name: agentName,
+                    link: href
                 });
+                seen.add(href);
             }
         }
     });
 
-    // Deduplicate by link
-    const seen = new Set();
-    return agents.filter(agent => {
-        if (seen.has(agent.link)) return false;
-        seen.add(agent.link);
-        return agent.link && agent.name && agent.name.length > 2;
-    }).slice(0, 100); // Limit to 100 to avoid too many
+    // Strategy 2: If we didn't find enough agents, look for clickable agent cards
+    if (agents.length === 0) {
+        // Look for elements that act like agent cards
+        const allDivs = document.querySelectorAll('div, article, section');
+
+        allDivs.forEach(el => {
+            // Check if this element contains agent-like content
+            const text = el.textContent;
+            const childLink = el.querySelector('a[href*="/profile/"]');
+
+            if (childLink && text.length > 10 && text.length < 500) {
+                const href = childLink.href;
+                const name = childLink.textContent.trim() || el.querySelector('h2, h3')?.textContent.trim() || '';
+
+                if (name && href && !seen.has(href)) {
+                    agents.push({
+                        name: name.split('\n')[0].trim(),
+                        link: href
+                    });
+                    seen.add(href);
+                }
+            }
+        });
+    }
+
+    return agents;
 }
 
 /**
