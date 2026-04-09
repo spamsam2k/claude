@@ -1,0 +1,17 @@
+{
+  "name": "zillow-agent-scraper",
+  "version": "1.0.0",
+  "description": "Extract agent data and phone numbers from Zillow",
+  "scripts": {
+    "update-extension": "node update-extension.js",
+    "update": "node update-extension.js"
+  },
+  "keywords": [
+    "zillow",
+    "scraper",
+    "chrome-extension",
+    "real-estate"
+  ],
+  "author": "",
+  "license": "MIT"
+}
