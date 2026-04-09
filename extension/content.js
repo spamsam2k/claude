@@ -22,8 +22,15 @@ function extractAgents() {
     const agents = [];
     const seen = new Set();
 
-    // Get all links to agent profiles
-    const links = document.querySelectorAll('a[href*="/profile/"]');
+    // Strategy 1: Get all links to agent profiles (standard format)
+    let links = document.querySelectorAll('a[href*="/profile/"]');
+
+    // Strategy 2: If no profiles found, try alternate patterns
+    if (links.length === 0) {
+        links = document.querySelectorAll('a[href*="agent"], a[href*="/realtor/"]');
+    }
+
+    console.log(`Found ${links.length} potential agent links`);
 
     links.forEach(link => {
         const href = link.href;
@@ -61,9 +68,11 @@ function extractAgents() {
             });
 
             seen.add(href);
+            console.log(`Extracted agent: ${name} from ${href}`);
         }
     });
 
+    console.log(`Total agents extracted: ${agents.length}`);
     return agents;
 }
 

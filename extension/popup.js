@@ -47,30 +47,40 @@ async function extractPage() {
         });
 
         const newAgents = response.agents || [];
-        allAgents = allAgents.concat(newAgents);
+        console.log(`Response from content script: ${newAgents.length} agents`);
 
-        // Extract phones from profiles
-        elements.currentAction.textContent = `Found ${newAgents.length} agents. Extracting phone numbers...`;
-        await extractPhones(tab[0].id, newAgents);
-
-        elements.agentsCount.textContent = allAgents.length;
-        elements.phonesCount.textContent = allAgents.filter(a => a.phone).length;
-        elements.currentAction.textContent = `✓ Page complete! ${allAgents.length} total agents`;
-        elements.statusBadge.textContent = 'Complete';
-        elements.downloadBtn.style.display = 'inline-block';
-        elements.resetBtn.style.display = 'inline-block';
-        elements.nextBtn.style.display = 'inline-block';
-
-        if (allAgents.length >= parseInt(elements.maxLeads.value)) {
-            elements.nextBtn.disabled = true;
-            elements.footerText.textContent = '✓ Reached maximum leads!';
+        if (newAgents.length === 0) {
+            elements.currentAction.textContent = '⚠️ No agents found. Try scrolling down or check the page loaded.';
+            elements.statusBadge.textContent = 'No Results';
+            elements.footerText.textContent = 'Make sure you\'re on a Zillow Find an Agent page with visible results';
         } else {
-            elements.footerText.textContent = '👉 Click "Next Page" to go to next page and extract';
+            allAgents = allAgents.concat(newAgents);
+
+            // Extract phones from profiles
+            elements.currentAction.textContent = `Found ${newAgents.length} agents. Extracting phone numbers...`;
+            await extractPhones(tab[0].id, newAgents);
+
+            elements.agentsCount.textContent = allAgents.length;
+            elements.phonesCount.textContent = allAgents.filter(a => a.phone).length;
+            elements.currentAction.textContent = `✓ Page complete! ${allAgents.length} total agents`;
+            elements.statusBadge.textContent = 'Complete';
+            elements.downloadBtn.style.display = 'inline-block';
+            elements.resetBtn.style.display = 'inline-block';
+            elements.nextBtn.style.display = 'inline-block';
+
+            if (allAgents.length >= parseInt(elements.maxLeads.value)) {
+                elements.nextBtn.disabled = true;
+                elements.footerText.textContent = '✓ Reached maximum leads!';
+            } else {
+                elements.footerText.textContent = '👉 Click "Next Page" to go to next page and extract';
+            }
         }
 
     } catch (e) {
+        console.error('Error during extraction:', e);
         elements.currentAction.textContent = `❌ Error: ${e.message}`;
         elements.statusBadge.textContent = 'Error';
+        elements.footerText.textContent = 'Check that content script is running. Refresh page and try again.';
     } finally {
         elements.extractBtn.disabled = false;
     }
@@ -117,9 +127,16 @@ async function clickNextPage() {
     elements.currentAction.textContent = 'Clicking next page...';
 
     try {
-        await chrome.tabs.sendMessage(tab[0].id, {
+        const response = await chrome.tabs.sendMessage(tab[0].id, {
             action: 'clickNextPage'
         });
+
+        if (!response.success) {
+            elements.currentAction.textContent = '⚠️ Could not find next button. You may be on the last page.';
+            elements.footerText.textContent = 'Pagination button not found - you may have reached the last page';
+            elements.nextBtn.disabled = false;
+            return;
+        }
 
         // Wait for page to load
         elements.currentAction.textContent = 'Page loading... Ready to extract when you see the next page';
@@ -130,7 +147,9 @@ async function clickNextPage() {
         }, 2000);
 
     } catch (e) {
-        elements.currentAction.textContent = `❌ Could not find next button: ${e.message}`;
+        console.error('Error clicking next page:', e);
+        elements.currentAction.textContent = `❌ Error: ${e.message}`;
+        elements.footerText.textContent = 'Check console (F12) for error details';
         elements.nextBtn.disabled = false;
     }
 }
