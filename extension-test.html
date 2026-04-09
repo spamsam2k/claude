@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zillow Scraper Extension Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .test { margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid #ccc; }
+        .pass { border-left-color: #4caf50; }
+        .fail { border-left-color: #f44336; }
+        .pending { border-left-color: #ff9800; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; }
+        button { padding: 10px 20px; margin: 10px 0; background: #2196F3; color: white; border: none; cursor: pointer; border-radius: 5px; }
+        button:hover { background: #1976D2; }
+        #results { margin-top: 20px; padding: 15px; background: white; border-radius: 5px; }
+        .log { font-size: 12px; margin: 5px 0; color: #666; }
+        .error { color: #d32f2f; }
+        .success { color: #388e3c; }
+    </style>
+</head>
+<body>
+    <h1>🏠 Zillow Scraper Extension Tester</h1>
+    <p>This page tests if your Zillow Scraper extension is properly installed and responding.</p>
+
+    <button onclick="runTests()">Run All Tests</button>
+
+    <div id="results"></div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+
+        function log(test, message, type = 'log') {
+            const entry = document.createElement('div');
+            entry.className = `log ${type}`;
+            entry.textContent = `${test}: ${message}`;
+            resultsDiv.appendChild(entry);
+        }
+
+        function addTest(name, passed, message) {
+            const test = document.createElement('div');
+            test.className = `test ${passed ? 'pass' : 'fail'}`;
+            test.innerHTML = `<strong>${passed ? '✓' : '✗'} ${name}</strong><br><small>${message}</small>`;
+            resultsDiv.appendChild(test);
+            return passed;
+        }
+
+        async function runTests() {
+            resultsDiv.innerHTML = '<h2>Running tests...</h2>';
+
+            let allPassed = true;
+
+            // Test 1: Check if extension is available
+            if (!chrome || !chrome.runtime) {
+                addTest('Chrome API', false, 'Chrome runtime not available. Extension might not be installed.');
+                return;
+            }
+            addTest('Chrome API', true, 'Chrome runtime available');
+
+            // Test 2: Try to send message to content script
+            try {
+                const response = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Timeout - no response from content script'));
+                    }, 5000);
+
+                    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+                        if (!tabs[0]) {
+                            clearTimeout(timeout);
+                            reject(new Error('No active tab found'));
+                            return;
+                        }
+
+                        chrome.tabs.sendMessage(tabs[0].id, {action: 'test'}, (response) => {
+                            clearTimeout(timeout);
+                            if (chrome.runtime.lastError) {
+                                reject(new Error(chrome.runtime.lastError.message));
+                            } else {
+                                resolve(response);
+                            }
+                        });
+                    });
+                });
+
+                if (response && response.error === 'Unknown action') {
+                    addTest('Content Script', true, 'Content script loaded and responding (unknown action is expected)');
+                } else {
+                    addTest('Content Script', true, 'Content script responded: ' + JSON.stringify(response));
+                }
+            } catch (error) {
+                addTest('Content Script', false, error.message);
+                allPassed = false;
+
+                // Provide helpful advice
+                if (error.message.includes('Receiving end does not exist')) {
+                    const advice = document.createElement('div');
+                    advice.innerHTML = `
+                        <h3>⚠️ Content script not responding</h3>
+                        <p>The extension popup loaded but the content script isn't responding. Try:</p>
+                        <ol>
+                            <li>Go to <code>chrome://extensions/</code></li>
+                            <li>Click the <strong>Remove</strong> button on Zillow Scraper</li>
+                            <li>Go to <code>file:///home/user/claude/extension</code> in address bar</li>
+                            <li>Or click <strong>Load unpacked</strong> and select <code>/home/user/claude/extension</code> folder</li>
+                            <li>Refresh this page</li>
+                            <li>Click "Run All Tests" again</li>
+                        </ol>
+                    `;
+                    resultsDiv.appendChild(advice);
+                }
+            }
+
+            // Test 3: Check current URL
+            const currentUrl = window.location.href;
+            const isZillow = currentUrl.includes('zillow.com');
+            addTest('URL Match', !isZillow, `Current URL: ${currentUrl} (extension only works on zillow.com)`);
+
+            // Summary
+            const summary = document.createElement('div');
+            summary.style.marginTop = '20px';
+            summary.innerHTML = `
+                <h3>${allPassed ? '✓ All tests passed!' : '✗ Some tests failed'}</h3>
+                <p>Open DevTools (F12) and go to Console tab to see detailed logs.</p>
+            `;
+            resultsDiv.appendChild(summary);
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            const autoRun = document.createElement('div');
+            autoRun.className = 'test pending';
+            autoRun.innerHTML = `<strong>Ready to test</strong><br><small>Click "Run All Tests" button above</small>`;
+            resultsDiv.appendChild(autoRun);
+        });
+    </script>
+</body>
+</html>
