@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zillow Agent Scraper</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 Zillow Scraper</h1>
+            <p class="subtitle">Extract agents & phone numbers</p>
+        </header>
+
+        <div id="status" class="status">
+            <span class="status-badge" id="statusBadge">Ready</span>
+        </div>
+
+        <div id="controls" class="controls">
+            <button id="startBtn" class="btn btn-primary btn-large">
+                <span class="btn-icon">▶️</span>
+                <span>Start Extraction</span>
+            </button>
+            <button id="stopBtn" class="btn btn-secondary" disabled>
+                <span class="btn-icon">⏹️</span>
+                <span>Stop</span>
+            </button>
+        </div>
+
+        <div id="progress" class="progress-section" style="display: none;">
+            <div class="progress-item">
+                <label>Pages Scanned:</label>
+                <span id="pagesCount">0</span>
+            </div>
+            <div class="progress-item">
+                <label>Agents Found:</label>
+                <span id="agentsCount">0</span>
+            </div>
+            <div class="progress-item">
+                <label>Phones Extracted:</label>
+                <span id="phonesCount">0</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="currentAction" class="current-action">Initializing...</p>
+        </div>
+
+        <div id="results" class="results" style="display: none;">
+            <h3>✅ Extraction Complete</h3>
+            <p id="resultsSummary"></p>
+            <button id="downloadBtn" class="btn btn-primary">
+                <span class="btn-icon">⬇️</span>
+                <span>Download CSV</span>
+            </button>
+            <button id="resetBtn" class="btn btn-secondary">
+                <span class="btn-icon">🔄</span>
+                <span>Start Over</span>
+            </button>
+        </div>
+
+        <div id="error" class="error" style="display: none;">
+            <p id="errorMessage"></p>
+            <button id="errorCloseBtn" class="btn btn-secondary">Close</button>
+        </div>
+
+        <footer>
+            <p>Make sure you're on a Zillow search results page</p>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
