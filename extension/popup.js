@@ -110,7 +110,8 @@ async function extractAllPages(tabId, settings) {
     let hasNextPage = true;
 
     while (hasNextPage && isRunning && scrapedCount < settings.maxLeads) {
-        updateAction(`Scanning page ${pageNum} for agents (min ${settings.minDeals} sales)...`);
+        const minLabel = settings.minDeals > 0 ? `(min ${settings.minDeals} sales)` : '';
+        updateAction(`Scanning page ${pageNum} for agents ${minLabel}...`);
 
         try {
             const response = await chrome.tabs.sendMessage(tabId, {

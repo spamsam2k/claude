@@ -65,8 +65,8 @@ function extractAgentCardData(cardContainer, link, minDeals) {
         return null;
     }
 
-    // Extract deals number
-    const dealsMatch = cardContainer.innerText.match(/(\d+)\s*team sales last 12 months/i);
+    // Extract deals number (matches "team sales" or just "sales")
+    const dealsMatch = cardContainer.innerText.match(/(\d+)\s*(?:team\s+)?sales last 12 months/i);
     const deals = dealsMatch ? parseInt(dealsMatch[1]) : 0;
 
     // Filter by minimum deals
