@@ -2,21 +2,31 @@
  * Simple content script - extract agent data from Zillow pages
  */
 
+console.log('📍 Zillow Scraper content script loaded');
+window.ZILLOW_SCRAPER_READY = true;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log('📩 Message received:', request.action);
     try {
         if (request.action === 'extractAgents') {
+            console.log('→ Extracting agents...');
             const agents = extractAgents();
+            console.log('→ Extracted:', agents.length, 'agents');
             sendResponse({ agents });
         } else if (request.action === 'extractProfile') {
+            console.log('→ Extracting profile...');
             const data = extractProfile();
+            console.log('→ Profile extracted');
             sendResponse(data);
         } else if (request.action === 'clickNextPage') {
+            console.log('→ Clicking next page...');
             const success = clickNextPageAuto();
+            console.log('→ Next click result:', success);
             sendResponse({ success });
         }
     } catch (error) {
-        console.error('Content script error:', error);
-        sendResponse({ error: error.message });
+        console.error('❌ Content script error:', error);
+        sendResponse({ error: error.message, stack: error.stack });
     }
 });
 

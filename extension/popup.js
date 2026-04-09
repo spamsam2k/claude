@@ -40,6 +40,7 @@ async function extractPage() {
     elements.progress.style.display = 'block';
     elements.currentAction.textContent = 'Extracting agents...';
     elements.statusBadge.textContent = 'Extracting';
+    console.log('🚀 Starting extraction on URL:', currentUrl);
 
     try {
         const response = await chrome.tabs.sendMessage(tab[0].id, {
@@ -77,10 +78,18 @@ async function extractPage() {
         }
 
     } catch (e) {
-        console.error('Error during extraction:', e);
-        elements.currentAction.textContent = `❌ Error: ${e.message}`;
+        console.error('❌ Error during extraction:', e);
+        const errorMsg = e.message || 'Unknown error';
+        elements.currentAction.textContent = `❌ Error: ${errorMsg}`;
         elements.statusBadge.textContent = 'Error';
-        elements.footerText.textContent = 'Check that content script is running. Refresh page and try again.';
+
+        if (errorMsg.includes('Receiving end does not exist')) {
+            elements.footerText.textContent = '⚠️ Content script not responding. Reload extension in chrome://extensions/ then refresh this page and try again.';
+        } else if (errorMsg.includes('Cannot access')) {
+            elements.footerText.textContent = '⚠️ Permission denied. Make sure extension is loaded and page is fully loaded.';
+        } else {
+            elements.footerText.textContent = `Error: ${errorMsg}. Check DevTools console (F12) for details.`;
+        }
     } finally {
         elements.extractBtn.disabled = false;
     }
